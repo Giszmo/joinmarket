@@ -15,7 +15,7 @@ REQUIRED INSTALLATION DEPENDENCIES
 
 + You will need python 2.7
 + You will need libsodium installed
- - You can get it here: http://doc.libsodium.org/ or through apt-get as `libsodium-dev`
+ - You can get it [here](http://doc.libsodium.org/) or through apt-get as `libsodium-dev`
  - Use this line to check it was installed correctly: `python lib/enc_wrapper.py`
 + Matplotlib for displaying the graphs in orderbook-watcher (optional)
 
