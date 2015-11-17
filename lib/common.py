@@ -9,7 +9,7 @@ from ConfigParser import SafeConfigParser, NoSectionError, NoOptionError
 import os, io, itertools
 
 JM_VERSION = 2
-nickname = ''
+nickname = None
 DUST_THRESHOLD = 2730
 bc_interface = None
 ordername_list = ["absorder", "relorder"]
@@ -176,6 +176,8 @@ def debug_dump_object(obj, skip_fields=[]):
 	debug('Class debug dump, name:' + obj.__class__.__name__)
 	for k, v in obj.__dict__.iteritems():
 		if k in skip_fields:
+			continue
+		if k == 'password' or k == 'given_password':
 			continue
 		debug('key=' + k)
 		if isinstance(v, str):
@@ -406,7 +408,7 @@ class Wallet(AbstractWallet):
 		return btc.bip32_extract_key(btc.bip32_ckd(self.keys[mixing_depth][forchange], i))
 
 	def get_addr(self, mixing_depth, forchange, i):
-		return btc.privtoaddr(self.get_key(mixing_depth, forchange, i), get_p2pk_vbyte())
+		return btc.privtoaddr(self.get_key(mixing_depth, forchange, i), magicbyte=get_p2pk_vbyte())
 
 	def get_new_addr(self, mixing_depth, forchange):
 		index = self.index[mixing_depth]
