@@ -1,4 +1,11 @@
-#!/usr/bin/python
+"""bci contains a collection of tools to retrieve and publish bitcoin blockchain
+related data.
+
+The services that bci.py interfaces with, are
+blockr.io, helloblock.io, blockchain.info and eligius.st.
+
+"""
+
 import json, re
 import random
 import sys

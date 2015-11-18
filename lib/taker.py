@@ -10,7 +10,7 @@ import sqlite3, base64, threading, time, random, pprint
 class CoinJoinTX(object):
 	#soon the taker argument will be removed and just be replaced by wallet or some other interface
 	def __init__(self, msgchan, wallet, db, cj_amount, orders, input_utxos, my_cj_addr,
-		my_change_addr, total_txfee, finishcallback, choose_orders_recover, auth_addr=None):
+		my_change_addr, total_txfee, finishcallback, choose_orders_recover, auth_addr=None, kp=None, my_btc_sig=None):
 		'''
 		if my_change is None then there wont be a change address
 		thats used if you want to entirely coinjoin one utxo with no change left over
@@ -44,8 +44,27 @@ class CoinJoinTX(object):
 		self.latest_tx = None
 		self.utxos = {None: self.input_utxos.keys()} #None means they belong to me
 		self.outputs = []
-		#create DH keypair on the fly for this Tx object
-		self.kp = enc_wrapper.init_keypair()
+		if kp:
+			print('kp is {0}'.format(kp))
+			self.kp = kp
+			if my_btc_sig:
+				self.my_btc_sig = my_btc_sig
+			else:
+				print 'ERROR: if key pair is provided, a btc sig has to be provided, too.'
+				return
+		else:
+			print('no kp') # huh?
+			#create DH keypair on the fly for this Tx object
+			self.kp = enc_wrapper.init_keypair()
+		if my_btc_sig == None:
+			print('no my_btc_sig')
+			if self.auth_addr:
+				self.my_btc_addr = self.auth_addr
+			else:
+				self.my_btc_addr = self.input_utxos.itervalues().next()['address']
+			my_btc_priv = self.wallet.get_key_from_addr(self.my_btc_addr)
+			self.my_btc_pub = btc.privtopub(my_btc_priv, True)
+			self.my_btc_sig = btc.ecdsa_sign(self.kp.hex_pk(), binascii.unhexlify(my_btc_priv))
 		self.crypto_boxes = {}
 		self.msgchan.fill_orders(self.active_orders, self.cj_amount, self.kp.hex_pk())
 
@@ -56,14 +75,7 @@ class CoinJoinTX(object):
 		self.crypto_boxes[nick] = [maker_pk, enc_wrapper.as_init_encryption(\
 		                        self.kp, enc_wrapper.init_pubkey(maker_pk))]
 		#send authorisation request
-		if self.auth_addr:
-			my_btc_addr = self.auth_addr
-		else:
-			my_btc_addr = self.input_utxos.itervalues().next()['address']
-		my_btc_priv = self.wallet.get_key_from_addr(my_btc_addr)
-		my_btc_pub = btc.privtopub(my_btc_priv, True)
-		my_btc_sig = btc.ecdsa_sign(self.kp.hex_pk(), binascii.unhexlify(my_btc_priv))
-		self.msgchan.send_auth(nick, my_btc_pub, my_btc_sig)
+		self.msgchan.send_auth(nick, self.my_btc_pub, self.my_btc_sig)
 	
 	def auth_counterparty(self, nick, btc_sig, cj_pub):
 		'''Validate the counterpartys claim to own the btc
@@ -331,6 +343,17 @@ class OrderbookWatch(CoinJoinerPeer):
 			+ "minsize INTEGER, maxsize INTEGER, txfee INTEGER, cjfee TEXT);")
 
 	def on_order_seen(self,	counterparty, oid, ordertype, minsize, maxsize, txfee, cjfee):
+		"""Gets called once an order is seen on the order book
+		
+		:param counterparty: nick of the counterparty
+		:param oid:          order ID
+		                     must be positive and <= sys.maxint
+		:param ordertype:    'absorder' or 'relorder'
+		:param minsize:      minimum satoshis accepted for this order
+		:param maxsize:      maximum satoshis accpeted for this order
+		:param txfee:        total transaction fee
+		:param cjfee:        coin join fee
+		"""
 		try:
 			if int(oid) < 0 or int(oid) > sys.maxint:
 				debug("Got invalid order ID: " + oid + " from " + counterparty)
@@ -394,10 +417,10 @@ class Taker(OrderbookWatch):
 			return None
 
 	def start_cj(self, wallet, cj_amount, orders, input_utxos, my_cj_addr, my_change_addr,
-			total_txfee, finishcallback=None, choose_orders_recover=None, auth_addr=None):
+			total_txfee, finishcallback=None, choose_orders_recover=None, auth_addr=None, kp=None, my_btc_sig=None):
 		self.cjtx = CoinJoinTX(self.msgchan, wallet, self.db, cj_amount, orders,
 			input_utxos, my_cj_addr, my_change_addr, total_txfee, finishcallback,
-			choose_orders_recover, auth_addr)
+			choose_orders_recover, auth_addr, kp, my_btc_sig)
 
 	def on_error(self):
 		pass #TODO implement
