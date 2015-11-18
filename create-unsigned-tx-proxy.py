@@ -19,6 +19,8 @@ import bitcoin as btc
 import sendpayment
 import libnacl.public
 import enc_wrapper
+import binascii
+
 app = Flask(__name__)
 
 @app.errorhandler(400)
@@ -39,7 +41,14 @@ def get_auth_key():
     """returns a libnacl public key for the client to sign in order to approve
        this proxy.
     """
-    # TODO: with one more node there is one more edge for a MITM to attack. We could/should? use pk for encryption with the client, too, at least optionally.
+    # TODO: with one more node there is one more edge for a MITM to attack.
+    # We could/should? use pk for encryption with the client, too, at least
+    # optionally.
+    # TODO: kp getting created per server start is one option but the client
+    # doesn't know if it can trust it. Maybe there should be one key pair per
+    # server instance that signs the per session keys, so the IRC can't
+    # (trivially) know it's the same proxy but the client can trust the proxy
+    # even without https.
     return jsonify({'pk': kp.pk.encode('hex')})
 
 @app.route('/joinmarket/v1/getUnsignedTransaction', methods = ['POST'])
@@ -55,7 +64,7 @@ def get_unsigned_transaction():
         abort(400)
     auth_utxo = request.json['authUtxo']
     naclKeySig = request.json['naclKeySig']
-    if not btc.ecdsa_verify(kp.pk.encode('hex'), naclKeySig, binascii.unhexlify(cj_pub)):
+    if not btc.ecdsa_verify(kp.pk.encode('hex'), naclKeySig.decode('hex'), binascii.unhexlify(cj_pub)):
         pass
     makerCount = request.json['makerCount']
     cold_utxos = request.json['utxos']
@@ -71,7 +80,6 @@ def get_unsigned_transaction():
         'pickorders': False,    # manually pick which orders to take
         'answeryes': True       # answer yes to everything
     })
-    kp = libnacl.public.SecretKey(naclKey)
     tx = main(auth_utxo, naclKeySig, cjamount, destaddr, changeaddr, cold_utxos, options, kp)
     return jsonify({'result': tx})
 

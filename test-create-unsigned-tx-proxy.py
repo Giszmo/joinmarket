@@ -12,7 +12,7 @@ auth_pkey = '76ab32de1b1dad851316cd51c7d9f1797b7159ac3ff24319f899c230ac452436'
 address2, sk2 = 'mzGNyEEJNYtRi7fGnMAKTV5EZDFN8J9jTX', 'L2xY5nTN3tjEXsmcns8CRc2RiLQqWhBNF9BiRiMRsCKC8U3exN9J'
 utxos = [authUtxo]
 
-naclKeySig = btc.ecdsa_sign(auth_pkey, btc.b58check_to_bin(sk1))
+naclKeySig = btc.ecdsa_sign(auth_pkey, btc.b58check_to_bin(sk1)).encode('hex')
 
 data = {'testnet': True,
         'authUtxo': authUtxo,
