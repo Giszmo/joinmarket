@@ -2,7 +2,10 @@ import requests
 import threading, pprint, sys, os
 data_dir = os.path.dirname(os.path.realpath(__file__))
 sys.path.insert(0, os.path.join(data_dir, 'lib'))
+from common import *
+import common
 import bitcoin as btc
+import libnacl.public
 
 address1  = 'n1aUo5P6mij5fJSGaefmdCTgjM7xxWhbVs'
 sk1 = btc.b58check_to_bin('L5cFx7NvWSWidwNtKnBQw5VrguTax2dGYajuz12S81UhX2ewRehH')
@@ -10,7 +13,9 @@ pk1 = btc.privkey_to_pubkey(sk1)
 
 authUtxo = 'cb2caca7500d2d943b4cd03db20ee67fcabc6afa9548e930e81632d164f6bfa1:0'
 
-auth_pkey = '55e37940fcf11c5fef84b5c0c980180fe0520f6f9bec89a27a157b54710f200a'
+common.load_program_config()
+nacl_sk_hex = config.get("JM_PROXY", "nacl_sk_hex")
+auth_pkey = libnacl.public.SecretKey(nacl_sk_hex.decode('hex')).pk.encode('hex')
 
 utxos = [authUtxo]
 
