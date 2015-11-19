@@ -35,7 +35,9 @@ def not_found(error):
 def ping():
     return jsonify({'ping': 'pong'})
 
-kp = enc_wrapper.init_keypair()
+# TODO: move to config or dynamic creation etc.
+kp = libnacl.public.SecretKey('301ad6d21e1975cf2c2c52d2c5762500236243a039c1e61d963174b371fc8830'.decode('hex'))
+# kp = enc_wrapper.init_keypair()
 @app.route('/joinmarket/v1/getAuthKey', methods = ['GET'])
 def get_auth_key():
     """returns a libnacl public key for the client to sign in order to approve
@@ -56,6 +58,7 @@ def get_unsigned_transaction():
     print(request.json)
     if (not request.json or
         not 'authUtxo' in request.json or
+        not 'authUtxoPK' in request.json or
         not 'naclKeySig' in request.json or
         not 'utxos' in request.json or
         not 'change' in request.json or
@@ -63,9 +66,15 @@ def get_unsigned_transaction():
         not 'amount' in request.json):
         abort(400)
     auth_utxo = request.json['authUtxo']
-    naclKeySig = request.json['naclKeySig']
-    if not btc.ecdsa_verify(kp.pk.encode('hex'), naclKeySig.decode('hex'), binascii.unhexlify(cj_pub)):
-        pass
+    authPK = request.json['authUtxoPK']
+    authPK = authPK.decode('hex')
+    naclKeySig = request.json['naclKeySig'].decode('hex')
+    if btc.ecdsa_verify(kp.pk.encode('hex'), naclKeySig, authPK):
+        print('good sig found')
+        # TODO: check if the public key matches the authUtxo
+    else:
+        print('bad sig. aborting.')
+        abort(400)
     makerCount = request.json['makerCount']
     cold_utxos = request.json['utxos']
     changeaddr = request.json['change']
