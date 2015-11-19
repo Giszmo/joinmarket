@@ -590,7 +590,9 @@ def pick_order(orders, n, feekey):
 		
 
 def choose_orders(db, cj_amount, n, chooseOrdersBy, ignored_makers=[]):
+	print('ignoring {0}'.format(ignored_makers))
 	sqlorders = db.execute('SELECT * FROM orderbook;').fetchall()
+	print('sqlorders {0}'.format(sqlorders))
 	orders = [(o['counterparty'], o['oid'],	calc_cj_fee(o['ordertype'], o['cjfee'], cj_amount), o['txfee'])
 		for o in sqlorders if cj_amount >= o['minsize'] and cj_amount <= o['maxsize'] and o['counterparty']
 		not in ignored_makers]
@@ -683,4 +685,3 @@ def choose_sweep_orders(db, total_input_value, total_txfee, n, chooseOrdersBy, i
 	result = dict([(o[0]['counterparty'], o[0]['oid']) for o in chosen_orders])
 	debug('cj amount = ' + str(cj_amount))
 	return result, cj_amount
-

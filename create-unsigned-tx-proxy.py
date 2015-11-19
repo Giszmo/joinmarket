@@ -66,10 +66,9 @@ def get_unsigned_transaction():
         not 'amount' in request.json):
         abort(400)
     auth_utxo = request.json['authUtxo']
-    authPK = request.json['authUtxoPK']
-    authPK = authPK.decode('hex')
+    authPK = str(request.json['authUtxoPK'])
     naclKeySig = request.json['naclKeySig'].decode('hex')
-    if btc.ecdsa_verify(kp.pk.encode('hex'), naclKeySig, authPK):
+    if btc.ecdsa_verify(kp.pk.encode('hex'), naclKeySig, authPK.decode('hex')):
         print('good sig found')
         # TODO: check if the public key matches the authUtxo
     else:
@@ -82,14 +81,14 @@ def get_unsigned_transaction():
     cjamount = request.json['amount']
     options = type('Options', (object,), {
         'testnet': request.json['testnet'],
-        'txfee': 10000,         # total miner fee in satoshis
+        'txfee': 100000,         # total miner fee in satoshis
         'waittime': 5,          # wait time in seconds to allow orders to arrive
         'makercount': 1,        # how many makers to coinjoin with
         'choosecheapest': True, # override weightened offers picking and choose cheapest
         'pickorders': False,    # manually pick which orders to take
         'answeryes': True       # answer yes to everything
     })
-    tx = main(auth_utxo, naclKeySig, cjamount, destaddr, changeaddr, cold_utxos, options, kp)
+    tx = main(auth_utxo, naclKeySig, cjamount, destaddr, changeaddr, cold_utxos, options, kp, authPK)
     return jsonify({'result': tx})
 
 #thread which does the buy-side algorithm
@@ -120,20 +119,12 @@ class PaymentThread(threading.Thread):
             orders, cjamount = choose_sweep_orders(self.taker.db, total_value,
                 self.taker.options.txfee, self.taker.options.makercount,
                 self.taker.chooseOrdersFunc, self.ignored_makers)
-            if not self.taker.options.answeryes:
-                total_cj_fee = total_value - cjamount - self.taker.options.txfee
-                debug('total cj fee = ' + str(total_cj_fee))
-                total_fee_pc = 1.0*total_cj_fee / cjamount
-                debug('total coinjoin fee = ' + str(float('%.3g' % (100.0 * total_fee_pc))) + '%')
-                sendpayment.check_high_fee(total_fee_pc)
-                if raw_input('send with these orders? (y/n):')[0] != 'y':
-                    self.finishcallback(None)
-                    return
         else:
             orders, total_cj_fee = self.sendpayment_choose_orders(
                 self.taker.cjamount, self.taker.options.makercount)
             if not orders:
                 debug('ERROR not enough liquidity in the orderbook, exiting')
+                self.taker.msgchan.shutdown()
                 return
             total_amount = self.taker.cjamount + total_cj_fee + self.taker.options.txfee
             print 'total amount spent = ' + str(total_amount)
@@ -144,9 +135,10 @@ class PaymentThread(threading.Thread):
         auth_addr = self.taker.utxo_data[self.taker.auth_utxo]['address']
         kp = self.taker.kp
         my_btc_sig = self.taker.naclKeySig
-        self.taker.start_cj(self.taker.wallet, cjamount, orders, utxos,
+        my_btc_pub = self.taker.my_btc_pub
+        self.taker.start_cj(None, cjamount, orders, utxos,
             self.taker.destaddr, change_addr, self.taker.options.txfee,
-            self.finishcallback, choose_orders_recover, auth_addr, kp, my_btc_sig)
+            self.finishcallback, choose_orders_recover, auth_addr, kp, my_btc_sig, my_btc_pub)
 
     def finishcallback(self, coinjointx):
         if coinjointx.all_responded:
@@ -171,20 +163,12 @@ class PaymentThread(threading.Thread):
         orders, total_cj_fee = choose_orders(self.taker.db, cj_amount, makercount,
             self.taker.chooseOrdersFunc, self.ignored_makers + active_nicks)
         if not orders:
+            print('no orders found :(')
             return None, 0
         print 'chosen orders to fill ' + str(orders) + ' totalcjfee=' + str(total_cj_fee)
-        if not self.taker.options.answeryes:
-            if len(self.ignored_makers) > 0:
-                noun = 'total'
-            else:
-                noun = 'additional'
-            total_fee_pc = 1.0*total_cj_fee / cj_amount
-            debug(noun + ' coinjoin fee = ' + str(float('%.3g' % (100.0 * total_fee_pc))) + '%')
-            sendpayment.check_high_fee(total_fee_pc)
-            if raw_input('send with these orders? (y/n):')[0] != 'y':
-                debug('ending')
-                self.taker.msgchan.shutdown()
-                return None, -1
+        total_fee_pc = 1.0*total_cj_fee / cj_amount
+        debug(' coinjoin fee = ' + str(float('%.3g' % (100.0 * total_fee_pc))) + '%')
+        sendpayment.check_high_fee(total_fee_pc)
         return orders, total_cj_fee
 
     def run(self):
@@ -195,7 +179,7 @@ class PaymentThread(threading.Thread):
 
 class CreateUnsignedTx(takermodule.Taker):
     def __init__(self, msgchan, auth_utxo, naclKeySig, cjamount, destaddr, changeaddr,
-            utxo_data, options, chooseOrdersFunc, kp):
+            utxo_data, options, chooseOrdersFunc, kp, my_btc_pub):
         super(CreateUnsignedTx, self).__init__(msgchan)
         self.auth_utxo = auth_utxo
         self.naclKeySig = naclKeySig
@@ -206,13 +190,14 @@ class CreateUnsignedTx(takermodule.Taker):
         self.options = options
         self.chooseOrdersFunc = chooseOrdersFunc
         self.kp = kp
+        self.my_btc_pub = my_btc_pub
         self.tx = None
 
     def on_welcome(self):
         takermodule.Taker.on_welcome(self)
         PaymentThread(self).start()
 
-def main(auth_utxo, naclKeySig, cjamount, destaddr, changeaddr, cold_utxos, options, kp):
+def main(auth_utxo, naclKeySig, cjamount, destaddr, changeaddr, cold_utxos, options, kp, my_btc_pub):
     common.load_program_config()
     addr_valid1, errormsg1 = validate_address(destaddr)
     #if amount = 0 dont bother checking changeaddr so user can write any junk
@@ -242,7 +227,7 @@ def main(auth_utxo, naclKeySig, cjamount, destaddr, changeaddr, cold_utxos, opti
 
     irc = IRCMessageChannel(common.nickname)
     taker = CreateUnsignedTx(irc, auth_utxo, naclKeySig, cjamount, destaddr,
-        changeaddr, utxo_data, options, chooseOrdersFunc, kp)
+        changeaddr, utxo_data, options, chooseOrdersFunc, kp, my_btc_pub)
     try:
         debug('starting irc')
         irc.run()

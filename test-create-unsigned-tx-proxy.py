@@ -24,7 +24,7 @@ data = {'testnet': True,
         'utxos': utxos,
         'change': 'mtrxCNUMYXRy2hQh2bBPeLjtRHWFKZcRkU',
         'recipient': 'mzGNyEEJNYtRi7fGnMAKTV5EZDFN8J9jTX',
-        'amount': 102419}
+        'amount': 600000}
 print(data)
 
 authPK = pk1
@@ -32,3 +32,4 @@ sigGood = btc.ecdsa_verify(auth_pkey, naclKeySig, authPK)
 print('sig is good: {0}'.format(sigGood))
 
 r = requests.post('http://127.0.0.1:5000/joinmarket/v1/getUnsignedTransaction', json=data)
+print r.json()

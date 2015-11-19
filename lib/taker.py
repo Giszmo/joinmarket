@@ -10,7 +10,7 @@ import sqlite3, base64, threading, time, random, pprint
 class CoinJoinTX(object):
 	#soon the taker argument will be removed and just be replaced by wallet or some other interface
 	def __init__(self, msgchan, wallet, db, cj_amount, orders, input_utxos, my_cj_addr,
-		my_change_addr, total_txfee, finishcallback, choose_orders_recover, auth_addr=None, kp=None, my_btc_sig=None):
+		my_change_addr, total_txfee, finishcallback, choose_orders_recover, auth_addr=None, kp=None, my_btc_sig=None, my_btc_pub=None):
 		'''
 		if my_change is None then there wont be a change address
 		thats used if you want to entirely coinjoin one utxo with no change left over
@@ -47,10 +47,11 @@ class CoinJoinTX(object):
 		if kp:
 			print('kp is {0}'.format(kp))
 			self.kp = kp
-			if my_btc_sig:
+			if my_btc_sig and my_btc_pub:
 				self.my_btc_sig = my_btc_sig
+				self.my_btc_pub = my_btc_pub
 			else:
-				print 'ERROR: if key pair is provided, a btc sig has to be provided, too.'
+				print 'ERROR: if key pair is provided, a btc sig and pub has to be provided, too.'
 				return
 		else:
 			print('no kp') # huh?
@@ -417,10 +418,10 @@ class Taker(OrderbookWatch):
 			return None
 
 	def start_cj(self, wallet, cj_amount, orders, input_utxos, my_cj_addr, my_change_addr,
-			total_txfee, finishcallback=None, choose_orders_recover=None, auth_addr=None, kp=None, my_btc_sig=None):
+			total_txfee, finishcallback=None, choose_orders_recover=None, auth_addr=None, kp=None, my_btc_sig=None, my_btc_pub=None):
 		self.cjtx = CoinJoinTX(self.msgchan, wallet, self.db, cj_amount, orders,
 			input_utxos, my_cj_addr, my_change_addr, total_txfee, finishcallback,
-			choose_orders_recover, auth_addr, kp, my_btc_sig)
+			choose_orders_recover, auth_addr, kp, my_btc_sig, my_btc_pub)
 
 	def on_error(self):
 		pass #TODO implement
