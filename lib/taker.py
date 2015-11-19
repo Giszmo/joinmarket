@@ -54,11 +54,9 @@ class CoinJoinTX(object):
 				print 'ERROR: if key pair is provided, a btc sig and pub has to be provided, too.'
 				return
 		else:
-			print('no kp') # huh?
 			#create DH keypair on the fly for this Tx object
 			self.kp = enc_wrapper.init_keypair()
 		if my_btc_sig == None:
-			print('no my_btc_sig')
 			if self.auth_addr:
 				self.my_btc_addr = self.auth_addr
 			else:
